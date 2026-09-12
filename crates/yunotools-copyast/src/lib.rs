@@ -5,12 +5,12 @@ mod detector;
 mod domain;
 mod duplicate;
 mod error;
+mod file_ops;
 mod framework;
 mod ignore;
 mod ignore_generator;
 mod ignore_template;
 mod incremental;
-mod path;
 mod scanner;
 mod service;
 mod templates;
@@ -34,8 +34,6 @@ pub use framework::{DetectedFramework, Framework, FrameworkDetector};
 pub use ignore_generator::IgnoreGenerator;
 
 pub use ignore_template::IgnoreTemplate;
-
-pub use incremental::IncrementalTracker;
 
 pub use service::CopyastService;
 

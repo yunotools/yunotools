@@ -35,4 +35,7 @@ pub enum CopyastError {
         .path.display()
     )]
     OutputIsDirectory { path: PathBuf },
+
+    #[error("unknown ignore template: {name}")]
+    UnknownIgnoreTemplate { name: String },
 }

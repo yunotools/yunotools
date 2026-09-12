@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 // File text đã được Copyast đọc thành công
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextFile {
     pub path: PathBuf,
     // nội dung UTF-8
@@ -16,7 +17,7 @@ impl TextFile {
     }
 
     pub fn size_bytes(&self) -> u64 {
-        self.content.len() as u64
+        u64::try_from(self.content.len()).unwrap_or(u64::MAX)
     }
 }
 
@@ -34,7 +35,10 @@ pub struct ScanStats {
 impl ScanStats {
     // tổng số file bỏ qua
     pub fn skipped(&self) -> usize {
-        self.ignored + self.binary + self.unreadable + self.too_large
+        self.ignored
+            .saturating_add(self.binary)
+            .saturating_add(self.unreadable)
+            .saturating_add(self.too_large)
     }
 }
 
@@ -62,6 +66,7 @@ pub struct IncrementalStats {
 }
 
 // Kết quả đầy đủ của 1 lần chạy Copyast
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CopyastResult {
     pub output: PathBuf,
     pub scan: ScanStats,

@@ -33,10 +33,6 @@ pub fn detect_binary(path: &Path) -> io::Result<bool> {
     Ok(has_too_many_control_characters(sample))
 }
 
-pub fn is_binary(path: &Path) -> bool {
-    detect_binary(path).unwrap_or(true)
-}
-
 // Kiểm tra một số signature thường gặp của file binary
 // Nhiều định dạng file đặt một chuỗi byte đặc biệt ở đầu file
 // Chuỗi này thường được gọi là “magic bytes” hoặc “file signature”

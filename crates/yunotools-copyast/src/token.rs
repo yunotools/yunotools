@@ -1,7 +1,6 @@
-use crate::config::TokenModel;
+use crate::config::{CopyastConfig, TokenModel};
 use crate::domain::TextFile;
-
-const COPYAST_BANNER: &str = "******************Yunotools-Copyast******************";
+use crate::writer::render_header;
 
 // Kết quả ước lượng token.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,25 +47,50 @@ pub struct TokenEstimator;
 impl TokenEstimator {
     // Ước lượng tổng token của tất cả file,
     // bao gồm cả header do Copyast tạo ra.
-    pub fn estimate(files: &[TextFile], model: TokenModel) -> TokenEstimate {
+    pub fn estimate(files: &[TextFile], config: &CopyastConfig) -> TokenEstimate {
+        let model = config.token_model;
         let mut total_tokens = 0_u64;
         let mut total_characters = 0_u64;
         let mut total_bytes = 0_u64;
 
-        for file in files {
-            let header = create_header(file);
+        for (index, file) in files.iter().enumerate() {
+            if index > 0 {
+                accumulate_text(
+                    "\n",
+                    model,
+                    &mut total_tokens,
+                    &mut total_characters,
+                    &mut total_bytes,
+                );
+            }
 
-            total_tokens = total_tokens
-                .saturating_add(Self::estimate_text(&header, model))
-                .saturating_add(Self::estimate_text(&file.content, model));
+            let header = render_header(file, config);
 
-            total_characters = total_characters
-                .saturating_add(count_characters(&header))
-                .saturating_add(count_characters(&file.content));
+            accumulate_text(
+                &header,
+                model,
+                &mut total_tokens,
+                &mut total_characters,
+                &mut total_bytes,
+            );
 
-            total_bytes = total_bytes
-                .saturating_add(count_bytes(&header))
-                .saturating_add(count_bytes(&file.content));
+            accumulate_text(
+                &file.content,
+                model,
+                &mut total_tokens,
+                &mut total_characters,
+                &mut total_bytes,
+            );
+
+            if !file.content.ends_with('\n') {
+                accumulate_text(
+                    "\n",
+                    model,
+                    &mut total_tokens,
+                    &mut total_characters,
+                    &mut total_bytes,
+                );
+            }
         }
 
         TokenEstimate {
@@ -127,13 +151,16 @@ impl TokenEstimator {
     }
 }
 
-// Tạo đúng hai dòng header mà Writer sẽ ghi.
-fn create_header(file: &TextFile) -> String {
-    format!(
-        "{}\n******************{}******************\n",
-        COPYAST_BANNER,
-        file.path.display(),
-    )
+fn accumulate_text(
+    text: &str,
+    model: TokenModel,
+    total_tokens: &mut u64,
+    total_characters: &mut u64,
+    total_bytes: &mut u64,
+) {
+    *total_tokens = total_tokens.saturating_add(TokenEstimator::estimate_text(text, model));
+    *total_characters = total_characters.saturating_add(count_characters(text));
+    *total_bytes = total_bytes.saturating_add(count_bytes(text));
 }
 
 // Chia số nguyên nhưng làm tròn lên.

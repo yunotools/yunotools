@@ -299,15 +299,11 @@ fn calculate_confidence(file_count: usize, total_files: usize, marker_found: boo
     // Về logic, file_count không nên lớn hơn total_files
     let normalized_file_count = file_count.min(total_files);
 
-    // Tránh chia cho 0
-    let file_score = if total_files == 0 {
-        0
-    } else {
-        // saturating_mul() ngăn overflow
-        // Nếu phép nhân vượt giới hạn usize,
-        // nó trả về usize::MAX thay vì wrap về một giá trị sai
-        normalized_file_count.saturating_mul(FILE_EVIDENCE_WEIGHT) / total_files
-    };
+    // saturating_mul() ngăn tràn số, checked_div() xử lý total_files = 0.
+    let file_score = normalized_file_count
+        .saturating_mul(FILE_EVIDENCE_WEIGHT)
+        .checked_div(total_files)
+        .unwrap_or(0);
 
     let marker_score = if marker_found {
         MARKER_EVIDENCE_WEIGHT

@@ -1,14 +1,13 @@
 use crate::{AppContext, AppError, ToolModule};
 
+#[derive(Default)]
 pub struct ModuleRegistry {
     modules: Vec<Box<dyn ToolModule>>,
 }
 
 impl ModuleRegistry {
     pub fn new() -> Self {
-        Self {
-            modules: Vec::new(),
-        }
+        Self::default()
     }
 
     pub fn register(&mut self, module: Box<dyn ToolModule>) {

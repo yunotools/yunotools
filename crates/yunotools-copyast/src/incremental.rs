@@ -1,11 +1,12 @@
+use crate::config::{CopyastConfig, PathMode};
 use crate::domain::{IncrementalStats, TextFile};
-use crate::{CopyastConfig, PathMode};
+use crate::file_ops::{append_suffix, create_parent_directory, replace_file};
 use std::collections::BTreeMap;
 use std::fs::{self, File};
-use std::io::{self, BufRead, BufWriter, Write};
+use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-const CACHE_VERSION: &str = "yuntuns-copyast-cache-v1";
+const CACHE_VERSION: &str = "yuntuns-copyast-cache-v2";
 
 // Nếu format mà Writer tạo ra thay đổi,
 // ta tăng version này để cache cũ mất hiệu lực
@@ -24,14 +25,14 @@ struct CacheState {
     files: BTreeMap<u64, FileFingerprint>,
 }
 
-pub struct IncrementalTracker {
+pub(crate) struct IncrementalTracker {
     cache_path: PathBuf,
 
     // Output có tồn tại trước khi chạy Copyast hay không
     output_exists: bool,
 
     // Cache cũ có tồn tại và đúng format hay không
-    previous_cache_valid: bool,
+    has_valid_cache: bool,
 
     // Fingerprint của những config ảnh hưởng tới output
     configuration_hash: u64,
@@ -44,8 +45,7 @@ pub struct IncrementalTracker {
 
 impl IncrementalTracker {
     // So sánh danh sách file hiện tại với cache của lần chạy trước.
-    // So sánh danh sách file hiện tại với cache của lần chạy trước.
-    pub fn analyze(config: &CopyastConfig, files: &[TextFile]) -> io::Result<Self> {
+    pub(crate) fn analyze(config: &CopyastConfig, files: &[TextFile]) -> io::Result<Self> {
         let output = &config.output;
         let cache_path = Self::cache_path_for(output);
 
@@ -58,7 +58,7 @@ impl IncrementalTracker {
         // Nếu hai đường dẫn tạo ra cùng một path_id, chúng vẫn được xem là cùng khóa
         // Việc chọn BTreeMap chỉ liên quan đến cách lưu và sắp xếp khóa
         let previous_state = load_cache(&cache_path)?;
-        let previous_cache_valid = previous_state.is_some();
+        let has_valid_cache = previous_state.is_some();
 
         let configuration_hash = configuration_fingerprint(config);
 
@@ -78,7 +78,7 @@ impl IncrementalTracker {
         Ok(Self {
             cache_path,
             output_exists: output.is_file(),
-            previous_cache_valid,
+            has_valid_cache,
             configuration_hash,
             current_files,
             stats: IncrementalStats {
@@ -94,22 +94,22 @@ impl IncrementalTracker {
     }
 
     // Cho biết output có cần được tạo hoặc cập nhật hay không
-    pub fn needs_update(&self) -> bool {
+    pub(crate) fn needs_update(&self) -> bool {
         !self.output_exists
-            || !self.previous_cache_valid
+            || !self.has_valid_cache
             || self.stats.configuration_changed
             || self.stats.changed > 0
             || self.stats.removed > 0
     }
 
     // Trả về kết quả thống kê
-    pub fn stats(&self) -> IncrementalStats {
+    pub(crate) fn stats(&self) -> IncrementalStats {
         self.stats.clone()
     }
 
     // Lưu trạng thái hiện tại để lần chạy sau có thể so sánh
     // Chỉ nên gọi hàm này sau khi Writer ghi output thành công
-    pub fn save(&self) -> io::Result<()> {
+    pub(crate) fn save(&self) -> io::Result<()> {
         create_parent_directory(&self.cache_path)?;
 
         // Không ghi trực tiếp vào cache chính.
@@ -117,57 +117,63 @@ impl IncrementalTracker {
         // sẽ không bị biến thành một file dở dang
         let temporary_cache_path = append_suffix(&self.cache_path, ".tmp");
 
-        let cache_file = File::create(&temporary_cache_path)?;
-
-        let mut writer = BufWriter::new(cache_file);
-
-        writeln!(writer, "{CACHE_VERSION}")?;
-
-        writeln!(writer, "config\t{}", self.configuration_hash,)?;
-
-        // Lưu số lượng file để phát hiện cache
-        // bị ghi thiếu giữa chừng
-        writeln!(writer, "count\t{}", self.current_files.len(),)?;
-
-        for (path_id, fingerprint) in &self.current_files {
-            writeln!(
-                writer,
-                "file\t{path_id}\t{}\t{}",
-                fingerprint.size, fingerprint.content_hash,
-            )?;
+        if let Err(error) = write_cache(
+            &temporary_cache_path,
+            self.configuration_hash,
+            &self.current_files,
+        ) {
+            let _ = fs::remove_file(&temporary_cache_path);
+            return Err(error);
         }
 
-        writer.flush()?;
+        if let Err(error) = replace_file(&temporary_cache_path, &self.cache_path) {
+            let _ = fs::remove_file(&temporary_cache_path);
+            return Err(error);
+        }
 
-        // Yêu cầu hệ điều hành đẩy dữ liệu xuống storage
-        // trước khi đổi tên file tạm
-        writer.get_ref().sync_all()?;
-
-        // Trên Windows không thể rename một file
-        // khi handle của nó vẫn đang mở
-        drop(writer);
-
-        replace_cache_file(&temporary_cache_path, &self.cache_path)
+        Ok(())
     }
 
     // Tạo đường dẫn cache dựa trên đường dẫn output
     // Ví dụ:
     // context.txt → context.txt.copyast-cache
-    pub fn cache_path_for(output: impl AsRef<Path>) -> PathBuf {
+    pub(crate) fn cache_path_for(output: impl AsRef<Path>) -> PathBuf {
         append_suffix(output.as_ref(), ".copyast-cache")
     }
 
     // Scanner sử dụng đường dẫn này để không đọc
     // nhầm cache đang được ghi dở
-    pub fn temporary_cache_path_for(output: impl AsRef<Path>) -> PathBuf {
+    pub(crate) fn temporary_cache_path_for(output: impl AsRef<Path>) -> PathBuf {
         let cache_path = Self::cache_path_for(output);
 
         append_suffix(&cache_path, ".tmp")
     }
+}
 
-    pub fn cache_path(&self) -> &Path {
-        &self.cache_path
+fn write_cache(
+    path: &Path,
+    configuration_hash: u64,
+    files: &BTreeMap<u64, FileFingerprint>,
+) -> io::Result<()> {
+    let cache_file = File::create(path)?;
+    let mut writer = BufWriter::new(cache_file);
+
+    writeln!(writer, "{CACHE_VERSION}")?;
+    writeln!(writer, "config\t{configuration_hash}")?;
+
+    // Lưu số lượng file để phát hiện cache bị ghi thiếu giữa chừng.
+    writeln!(writer, "count\t{}", files.len())?;
+
+    for (path_id, fingerprint) in files {
+        writeln!(
+            writer,
+            "file\t{path_id}\t{}\t{}",
+            fingerprint.size, fingerprint.content_hash,
+        )?;
     }
+
+    writer.flush()?;
+    writer.get_ref().sync_all()
 }
 
 // So sánh trạng thái file hiện tại với cache cũ
@@ -461,38 +467,4 @@ fn stable_hash(bytes: &[u8]) -> u64 {
     // - Kiểm tra dữ liệu chống giả mạo.
     // - Input do kẻ tấn công chủ động tạo.
     hash
-}
-
-// Thêm suffix vào cuối đường dẫn mà không làm mất extension
-fn append_suffix(path: &Path, suffix: &str) -> PathBuf {
-    let mut result = path.as_os_str().to_os_string();
-
-    result.push(suffix);
-
-    PathBuf::from(result)
-}
-
-// Đưa cache tạm thành cache chính thức
-fn replace_cache_file(temporary_path: &Path, cache_path: &Path) -> io::Result<()> {
-    // Trên Windows, rename không ghi đè
-    // lên file đã tồn tại
-    #[cfg(windows)]
-    if cache_path.exists() {
-        fs::remove_file(cache_path)?;
-    }
-
-    fs::rename(temporary_path, cache_path)
-}
-
-// Tạo thư mục cha của cache nếu nó chưa tồn tại
-fn create_parent_directory(path: &Path) -> io::Result<()> {
-    let Some(parent) = path.parent() else {
-        return Ok(());
-    };
-
-    if parent.as_os_str().is_empty() {
-        return Ok(());
-    }
-
-    fs::create_dir_all(parent)
 }

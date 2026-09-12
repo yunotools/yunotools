@@ -1,14 +1,17 @@
-use crate::IgnoreTemplate;
+use crate::{CopyastError, IgnoreTemplate};
 use std::fs;
 
 pub struct IgnoreGenerator;
 
 impl IgnoreGenerator {
-    pub fn generate(kind: &str) -> Result<(), String> {
-        let content =
-            IgnoreTemplate::generate(kind).ok_or(format!("Unknown template: {}", kind))?;
+    pub fn generate(template_name: &str) -> Result<(), CopyastError> {
+        let content = IgnoreTemplate::generate(template_name).ok_or_else(|| {
+            CopyastError::UnknownIgnoreTemplate {
+                name: template_name.to_owned(),
+            }
+        })?;
 
-        fs::write(".yunotools-ignore", content).map_err(|e| e.to_string())?;
+        fs::write(".yunotools-ignore", content)?;
 
         Ok(())
     }

@@ -1,16 +1,15 @@
-use crate::{CopyastService, IgnoreGenerator};
+use crate::{CopyastConfig, CopyastService, IgnoreGenerator};
 
 use yunotools_core::{AppContext, AppError, ModuleMetadata, ToolModule};
 
+#[derive(Default)]
 pub struct CopyastCommand {
     service: CopyastService,
 }
 
 impl CopyastCommand {
     pub fn new() -> Self {
-        Self {
-            service: CopyastService::new(),
-        }
+        Self::default()
     }
 }
 
@@ -24,11 +23,12 @@ impl ToolModule for CopyastCommand {
 
     fn execute(&self, _ctx: &AppContext, args: &[String]) -> Result<(), AppError> {
         if let Some(index) = args.iter().position(|x| x == "--gen-ignore") {
-            if let Some(kind) = args.get(index + 1) {
-                IgnoreGenerator::generate(kind).map_err(|e| AppError::Module(e))?;
+            let kind = args.get(index + 1).ok_or_else(|| {
+                AppError::Module("Missing ignore template name after --gen-ignore".into())
+            })?;
 
-                return Ok(());
-            }
+            IgnoreGenerator::generate(kind).map_err(|error| AppError::Module(error.to_string()))?;
+            return Ok(());
         }
 
         let input = args.get(2).map(|x| x.as_str()).unwrap_or(".");
@@ -38,9 +38,11 @@ impl ToolModule for CopyastCommand {
             .map(|x| x.as_str())
             .unwrap_or("copyast-output.txt");
 
+        let config = CopyastConfig::new(input, output);
+
         self.service
-            .run(input, output)
-            .map_err(|err| AppError::Module(err.to_string()))?;
+            .run(&config)
+            .map_err(|error| AppError::Module(error.to_string()))?;
 
         Ok(())
     }

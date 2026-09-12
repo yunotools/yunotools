@@ -1,4 +1,4 @@
-use crate::{DuplicateGroup, TextFile};
+use crate::domain::{DuplicateGroup, TextFile};
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 
@@ -6,7 +6,7 @@ pub struct DuplicateDetector;
 
 impl DuplicateDetector {
     // Tìm những nhóm file có nội dung giống hệt nhau
-    pub fn find(files: &[TextFile]) -> Vec<DuplicateGroup> {
+    pub fn find_groups(files: &[TextFile]) -> Vec<DuplicateGroup> {
         exact_duplicate_groups(files)
             .into_iter()
             .map(|indices| create_duplicate_group(files, &indices))

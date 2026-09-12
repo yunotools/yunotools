@@ -8,6 +8,5 @@ yunotools-core = {
     path = "../yunotools-core"
 }
 
-walkdir = "2"
 ignore = "0.4"
 thiserror = "1"
