@@ -1,0 +1,13 @@
+[package]
+name = "yunotools-copyast"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+yunotools-core = {
+    path = "../yunotools-core"
+}
+
+walkdir = "2"
+ignore = "0.4"
+thiserror = "1"

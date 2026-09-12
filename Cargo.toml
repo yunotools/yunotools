@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+    "apps/yunotools-cli",
+    "crates/yunotools-core",
+    "crates/yunotools-copyast",
+]

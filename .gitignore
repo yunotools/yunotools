@@ -1,0 +1,117 @@
+# =========================
+# Rust
+# =========================
+
+# Build output
+target/
+
+# Rust compiler artifacts
+*.rs.bk
+*.pdb
+
+# Rust analyzer
+rust-project.json
+
+# =========================
+# IDE / Editors
+# =========================
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# IntelliJ IDEA / RustRover / CLion
+.idea/
+*.iml
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# =========================
+# OS generated files
+# =========================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# =========================
+# Environment files
+# =========================
+
+.env
+.env.*
+!.env.example
+
+# =========================
+# Logs
+# =========================
+
+*.log
+logs/
+
+# =========================
+# Coverage / Profiling
+# =========================
+
+coverage/
+*.profraw
+*.profdata
+grcov/
+
+# =========================
+# Benchmarks
+# =========================
+
+criterion/
+
+# =========================
+# Temporary files
+# =========================
+
+tmp/
+temp/
+*.tmp
+*.bak
+
+# =========================
+# Cargo tools
+# =========================
+
+# cargo-expand
+expand/
+
+# cargo-watch
+.cargo-watch/
+
+# =========================
+# Generated files
+# =========================
+
+generated/
+out/
+dist/
