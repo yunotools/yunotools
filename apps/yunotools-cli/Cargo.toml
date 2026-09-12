@@ -10,9 +10,3 @@ yunotools-core = {
 yunotools-copyast = {
     path = "../../crates/yunotools-copyast"
 }
-clap = {
-    version = "4",
-    features = [
-        "derive"
-    ]
-}

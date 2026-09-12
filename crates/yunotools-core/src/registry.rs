@@ -17,8 +17,11 @@ impl ModuleRegistry {
 
     pub fn execute(&self, ctx: &AppContext, args: &[String]) -> Result<(), AppError> {
         for module in &self.modules {
-            module.execute(ctx, args)?;
+            if module.matches(args) {
+                return module.execute(ctx, args);
+            }
         }
-        Ok(())
+
+        Err(AppError::Module("No matching command".into()))
     }
 }

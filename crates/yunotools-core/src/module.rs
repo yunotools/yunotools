@@ -10,5 +10,7 @@ pub struct ModuleMetadata {
 pub trait ToolModule {
     fn metadata(&self) -> ModuleMetadata;
 
+    fn matches(&self, args: &[String]) -> bool;
+
     fn execute(&self, ctx: &AppContext, args: &[String]) -> Result<(), AppError>;
 }
