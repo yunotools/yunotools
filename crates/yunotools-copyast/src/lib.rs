@@ -1,40 +1,26 @@
-mod binary;
+mod analysis;
 mod command;
 mod config;
-mod detector;
 mod domain;
-mod duplicate;
 mod error;
-mod file_ops;
-mod framework;
 mod ignore;
-mod ignore_generator;
-mod ignore_template;
-mod incremental;
-mod scanner;
+mod pipeline;
 mod service;
 mod templates;
-mod token;
-mod writer;
 
 pub use command::CopyastCommand;
 
 pub use config::{CopyastConfig, DEFAULT_MAX_FILE_SIZE, PathMode, TokenModel};
 
-pub use detector::{DetectedLanguage, Language, LanguageDetector};
+pub use analysis::{
+    DetectedFramework, DetectedLanguage, DuplicateDetector, Framework, FrameworkDetector, Language,
+    LanguageDetector, TokenEstimate, TokenEstimator,
+};
 
 pub use domain::{CopyastResult, DuplicateGroup, IncrementalStats, ScanStats, TextFile};
 
-pub use duplicate::DuplicateDetector;
-
 pub use error::CopyastError;
 
-pub use framework::{DetectedFramework, Framework, FrameworkDetector};
-
-pub use ignore_generator::IgnoreGenerator;
-
-pub use ignore_template::IgnoreTemplate;
+pub use ignore::{IgnoreGenerator, IgnoreTemplate};
 
 pub use service::CopyastService;
-
-pub use token::{TokenEstimate, TokenEstimator};

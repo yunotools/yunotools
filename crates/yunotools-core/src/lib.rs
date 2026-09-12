@@ -6,5 +6,6 @@ pub mod registry;
 
 pub use context::AppContext;
 pub use error::AppError;
+pub use logger::LogLevel;
 pub use module::{ModuleMetadata, ToolModule};
 pub use registry::ModuleRegistry;

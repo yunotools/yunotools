@@ -68,6 +68,9 @@ pub struct CopyastConfig {
     // Có quét các file/folder ẩn hay không
     pub include_hidden: bool,
 
+    // Các tên ignore file bổ sung, ví dụ `.mycompanyignore`.
+    pub additional_ignore_files: Vec<String>,
+
     pub max_file_size: u64,
 }
 
@@ -83,7 +86,53 @@ impl CopyastConfig {
             dry_run: false,
             respect_ignore: true,
             include_hidden: false,
+            additional_ignore_files: Vec::new(),
             max_file_size: DEFAULT_MAX_FILE_SIZE,
         }
+    }
+
+    pub fn with_path_mode(mut self, path_mode: PathMode) -> Self {
+        self.path_mode = path_mode;
+        self
+    }
+
+    pub fn with_token_model(mut self, token_model: TokenModel) -> Self {
+        self.token_model = token_model;
+        self
+    }
+
+    pub fn with_incremental(mut self, enabled: bool) -> Self {
+        self.incremental = enabled;
+        self
+    }
+
+    pub fn with_deduplication(mut self, enabled: bool) -> Self {
+        self.deduplicate = enabled;
+        self
+    }
+
+    pub fn with_dry_run(mut self, enabled: bool) -> Self {
+        self.dry_run = enabled;
+        self
+    }
+
+    pub fn with_ignore_files(mut self, enabled: bool) -> Self {
+        self.respect_ignore = enabled;
+        self
+    }
+
+    pub fn with_hidden_files(mut self, enabled: bool) -> Self {
+        self.include_hidden = enabled;
+        self
+    }
+
+    pub fn with_additional_ignore_files(mut self, file_names: Vec<String>) -> Self {
+        self.additional_ignore_files = file_names;
+        self
+    }
+
+    pub fn with_max_file_size(mut self, max_file_size: u64) -> Self {
+        self.max_file_size = max_file_size;
+        self
     }
 }

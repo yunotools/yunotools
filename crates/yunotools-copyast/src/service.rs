@@ -1,14 +1,10 @@
+use crate::analysis::{DuplicateDetector, FrameworkDetector, LanguageDetector, TokenEstimator};
 use crate::config::CopyastConfig;
-use crate::detector::LanguageDetector;
 use crate::domain::{CopyastResult, IncrementalStats, TextFile};
-use crate::duplicate::DuplicateDetector;
 use crate::error::CopyastError;
-use crate::file_ops::paths_equal;
-use crate::framework::FrameworkDetector;
-use crate::incremental::IncrementalTracker;
-use crate::scanner;
-use crate::token::TokenEstimator;
-use crate::writer;
+use crate::pipeline::file_ops::paths_equal;
+use crate::pipeline::incremental::IncrementalTracker;
+use crate::pipeline::{scanner, writer};
 use std::path::Path;
 use yunotools_core::logger;
 
