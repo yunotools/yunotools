@@ -1,31 +1,19 @@
-use super::{default, docker, go, node, python, rust};
+use super::catalog;
 
 pub fn generate() -> String {
     let mut result = String::new();
 
-    result.push_str("\n# =========================\n# DEFAULT\n# =========================\n");
+    for (index, template) in catalog::all().iter().enumerate() {
+        if index > 0 {
+            result.push('\n');
+        }
 
-    result.push_str(default::TEMPLATE);
-
-    result.push_str("\n# =========================\n# RUST\n# =========================\n");
-
-    result.push_str(rust::TEMPLATE);
-
-    result.push_str("\n# =========================\n# NODE\n# =========================\n");
-
-    result.push_str(node::TEMPLATE);
-
-    result.push_str("\n# =========================\n# PYTHON\n# =========================\n");
-
-    result.push_str(python::TEMPLATE);
-
-    result.push_str("\n# =========================\n# GO\n# =========================\n");
-
-    result.push_str(go::TEMPLATE);
-
-    result.push_str("\n# =========================\n# DOCKER\n# =========================\n");
-
-    result.push_str(docker::TEMPLATE);
+        result.push_str("# =========================\n# ");
+        result.push_str(template.title);
+        result.push_str("\n# =========================\n");
+        result.push_str(template.content.trim());
+        result.push('\n');
+    }
 
     result
 }

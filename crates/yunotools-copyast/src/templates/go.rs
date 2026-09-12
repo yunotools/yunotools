@@ -4,4 +4,9 @@ pub const TEMPLATE: &str = r#"
 bin/
 vendor/
 *.exe
+*.exe~
+*.test
+*.out
+coverage.txt
+coverage.html
 "#;

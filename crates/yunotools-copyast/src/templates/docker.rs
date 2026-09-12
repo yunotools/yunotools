@@ -2,6 +2,10 @@ pub const TEMPLATE: &str = r#"
 
 # Docker
 *.tar
-Dockerfile*
-docker-compose*
+*.tar.gz
+*.img
+.docker/
+.docker-cache/
+docker-volume-data/
+volumes/
 "#;
