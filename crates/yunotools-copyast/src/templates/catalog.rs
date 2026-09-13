@@ -309,11 +309,11 @@ const TEMPLATES: &[TemplateDefinition] = &[
     },
 ];
 
-pub fn all() -> &'static [TemplateDefinition] {
+pub fn list_templates() -> &'static [TemplateDefinition] {
     TEMPLATES
 }
 
-pub fn find(template_name: &str) -> Option<&'static TemplateDefinition> {
+pub fn find_template(template_name: &str) -> Option<&'static TemplateDefinition> {
     let normalized_name = template_name.trim().to_ascii_lowercase();
 
     TEMPLATES.iter().find(|template| {

@@ -29,7 +29,7 @@ pub enum TokenModel {
 }
 
 impl TokenModel {
-    pub fn name(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             Self::Cl100k => "cl100k",
             Self::O200k => "o200k",
@@ -42,10 +42,10 @@ impl TokenModel {
 #[derive(Debug, Clone)]
 pub struct CopyastConfig {
     // File hoặc folder cần đọc
-    pub input: PathBuf,
+    pub input_path: PathBuf,
 
     // File hoặc folder nhận kết quả
-    pub output: PathBuf,
+    pub output_path: PathBuf,
 
     // Cách hiển thị đường dẫn trong header
     pub path_mode: PathMode,
@@ -54,40 +54,40 @@ pub struct CopyastConfig {
     pub token_model: TokenModel,
 
     // Chỉ cập nhật output khi source thay đổi
-    pub incremental: bool,
+    pub is_incremental: bool,
 
     // Chỉ giữ file đầu tiên nếu nội dung bị trùng
-    pub deduplicate: bool,
+    pub should_deduplicate: bool,
 
     // Chỉ quét và báo cáo, không ghi output
-    pub dry_run: bool,
+    pub is_dry_run: bool,
 
     // Có sử dụng các file ignore hay không
-    pub respect_ignore: bool,
+    pub should_respect_ignore: bool,
 
     // Có quét các file/folder ẩn hay không
-    pub include_hidden: bool,
+    pub should_include_hidden: bool,
 
     // Các tên ignore file bổ sung, ví dụ `.mycompanyignore`.
-    pub additional_ignore_files: Vec<String>,
+    pub additional_ignore_file_names: Vec<String>,
 
-    pub max_file_size: u64,
+    pub max_file_size_bytes: u64,
 }
 
 impl CopyastConfig {
-    pub fn new(input: impl Into<PathBuf>, output: impl Into<PathBuf>) -> Self {
+    pub fn new(input_path: impl Into<PathBuf>, output_path: impl Into<PathBuf>) -> Self {
         Self {
-            input: input.into(),
-            output: output.into(),
+            input_path: input_path.into(),
+            output_path: output_path.into(),
             path_mode: PathMode::Auto,
             token_model: TokenModel::O200k,
-            incremental: false,
-            deduplicate: false,
-            dry_run: false,
-            respect_ignore: true,
-            include_hidden: false,
-            additional_ignore_files: Vec::new(),
-            max_file_size: DEFAULT_MAX_FILE_SIZE,
+            is_incremental: false,
+            should_deduplicate: false,
+            is_dry_run: false,
+            should_respect_ignore: true,
+            should_include_hidden: false,
+            additional_ignore_file_names: Vec::new(),
+            max_file_size_bytes: DEFAULT_MAX_FILE_SIZE,
         }
     }
 
@@ -101,38 +101,38 @@ impl CopyastConfig {
         self
     }
 
-    pub fn with_incremental(mut self, enabled: bool) -> Self {
-        self.incremental = enabled;
+    pub fn with_incremental(mut self, is_enabled: bool) -> Self {
+        self.is_incremental = is_enabled;
         self
     }
 
-    pub fn with_deduplication(mut self, enabled: bool) -> Self {
-        self.deduplicate = enabled;
+    pub fn with_deduplication(mut self, is_enabled: bool) -> Self {
+        self.should_deduplicate = is_enabled;
         self
     }
 
-    pub fn with_dry_run(mut self, enabled: bool) -> Self {
-        self.dry_run = enabled;
+    pub fn with_dry_run(mut self, is_enabled: bool) -> Self {
+        self.is_dry_run = is_enabled;
         self
     }
 
-    pub fn with_ignore_files(mut self, enabled: bool) -> Self {
-        self.respect_ignore = enabled;
+    pub fn with_ignore_files(mut self, is_enabled: bool) -> Self {
+        self.should_respect_ignore = is_enabled;
         self
     }
 
-    pub fn with_hidden_files(mut self, enabled: bool) -> Self {
-        self.include_hidden = enabled;
+    pub fn with_hidden_files(mut self, is_enabled: bool) -> Self {
+        self.should_include_hidden = is_enabled;
         self
     }
 
-    pub fn with_additional_ignore_files(mut self, file_names: Vec<String>) -> Self {
-        self.additional_ignore_files = file_names;
+    pub fn with_additional_ignore_file_names(mut self, file_names: Vec<String>) -> Self {
+        self.additional_ignore_file_names = file_names;
         self
     }
 
-    pub fn with_max_file_size(mut self, max_file_size: u64) -> Self {
-        self.max_file_size = max_file_size;
+    pub fn with_max_file_size_bytes(mut self, max_file_size_bytes: u64) -> Self {
+        self.max_file_size_bytes = max_file_size_bytes;
         self
     }
 }

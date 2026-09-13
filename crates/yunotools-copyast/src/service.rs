@@ -2,7 +2,7 @@ use crate::analysis::{DuplicateDetector, FrameworkDetector, LanguageDetector, To
 use crate::config::CopyastConfig;
 use crate::domain::{CopyastResult, IncrementalStats, TextFile};
 use crate::error::CopyastError;
-use crate::pipeline::file_ops::paths_equal;
+use crate::pipeline::file_ops::are_paths_equal;
 use crate::pipeline::incremental::IncrementalTracker;
 use crate::pipeline::{scanner, writer};
 use std::path::Path;
@@ -21,17 +21,20 @@ impl CopyastService {
         validate_config(config)?;
         logger::info("Copyast scanning started");
 
-        let scan_output = scanner::scan(config);
+        let scan_output = scanner::scan_files(config);
         let mut files = scan_output.files;
         let scan_stats = scan_output.stats;
 
-        logger::info(&format!("Copied files: {}", scan_stats.copied));
+        logger::info(&format!("Copied files: {}", scan_stats.copied_files));
 
-        if scan_stats.skipped() > 0 {
-            logger::warn(&format!("Skipped files: {}", scan_stats.skipped()));
+        if scan_stats.count_skipped_files() > 0 {
+            logger::warn(&format!(
+                "Skipped files: {}",
+                scan_stats.count_skipped_files()
+            ));
         }
 
-        let detection_root = detection_root(config);
+        let detection_root = resolve_detection_root(config);
 
         let detected_languages = LanguageDetector::analyze(detection_root, &files)
             .into_iter()
@@ -48,22 +51,22 @@ impl CopyastService {
         logger::info(&format!("Detected frameworks: {detected_frameworks:?}"));
 
         // Tìm nhóm trùng trước khi xóa để vẫn trả đủ báo cáo.
-        let duplicate_groups = DuplicateDetector::find_groups(&files);
+        let duplicate_groups = DuplicateDetector::find_duplicates(&files);
 
-        if config.deduplicate {
-            let removed_count = DuplicateDetector::remove_duplicates(&mut files);
-            logger::info(&format!("Removed duplicate files: {removed_count}"));
+        if config.should_deduplicate {
+            let removed_files = DuplicateDetector::remove_duplicates(&mut files);
+            logger::info(&format!("Removed duplicate files: {removed_files}"));
         }
 
         let token_estimate = TokenEstimator::estimate(&files, config);
 
         logger::info(&format!(
             "Estimated tokens for {}: {}",
-            token_estimate.model.name(),
-            token_estimate.tokens,
+            token_estimate.token_model.as_str(),
+            token_estimate.estimated_tokens,
         ));
 
-        let incremental = if config.incremental {
+        let incremental_stats = if config.is_incremental {
             Some(write_incremental_output(config, &files)?)
         } else {
             write_output(config, &files)?;
@@ -73,66 +76,66 @@ impl CopyastService {
         logger::success("Copyast finished");
 
         Ok(CopyastResult {
-            output: config.output.clone(),
-            scan: scan_stats,
-            total_bytes: token_estimate.bytes,
-            estimated_tokens: token_estimate.tokens,
+            output_path: config.output_path.clone(),
+            scan_stats,
+            total_bytes: token_estimate.byte_count,
+            estimated_tokens: token_estimate.estimated_tokens,
             detected_languages,
             detected_frameworks,
             duplicate_groups,
-            incremental,
+            incremental_stats,
         })
     }
 }
 
 fn validate_config(config: &CopyastConfig) -> Result<(), CopyastError> {
-    if !config.input.exists() {
+    if !config.input_path.exists() {
         return Err(CopyastError::InputNotFound {
-            path: config.input.clone(),
+            path: config.input_path.clone(),
         });
     }
 
-    if config.output.as_os_str().is_empty() {
+    if config.output_path.as_os_str().is_empty() {
         return Err(CopyastError::EmptyOutputPath);
     }
 
-    if !config.input.is_file() && !config.input.is_dir() {
+    if !config.input_path.is_file() && !config.input_path.is_dir() {
         return Err(CopyastError::UnsupportedInputType {
-            path: config.input.clone(),
+            path: config.input_path.clone(),
         });
     }
 
-    if config.output.is_dir() {
+    if config.output_path.is_dir() {
         return Err(CopyastError::OutputIsDirectory {
-            path: config.output.clone(),
+            path: config.output_path.clone(),
         });
     }
 
     // File input và output trùng nhau sẽ làm Writer ghi đè source.
-    if config.input.is_file() && paths_equal(&config.input, &config.output) {
+    if config.input_path.is_file() && are_paths_equal(&config.input_path, &config.output_path) {
         return Err(CopyastError::InputOutputConflict {
-            path: config.input.clone(),
+            path: config.input_path.clone(),
         });
     }
 
     Ok(())
 }
 
-fn detection_root(config: &CopyastConfig) -> &Path {
-    if config.input.is_file() {
-        return config.input.parent().unwrap_or(Path::new("."));
+fn resolve_detection_root(config: &CopyastConfig) -> &Path {
+    if config.input_path.is_file() {
+        return config.input_path.parent().unwrap_or(Path::new("."));
     }
 
-    &config.input
+    &config.input_path
 }
 
 fn write_output(config: &CopyastConfig, files: &[TextFile]) -> Result<(), CopyastError> {
-    if config.dry_run {
+    if config.is_dry_run {
         logger::info("Dry-run enabled: output was not written");
         return Ok(());
     }
 
-    writer::write(files, config)?;
+    writer::write_output(files, config)?;
     Ok(())
 }
 
@@ -143,20 +146,20 @@ fn write_incremental_output(
     let tracker = IncrementalTracker::analyze(config, files)?;
     let mut stats = tracker.stats();
 
-    if config.dry_run {
+    if config.is_dry_run {
         logger::info("Dry-run enabled: output and cache were not written");
         return Ok(stats);
     }
 
-    if !tracker.needs_update() {
+    if !tracker.should_update_output() {
         logger::info("No source changes detected: output was not rewritten");
         return Ok(stats);
     }
 
     // Cache chỉ được xác nhận sau khi output đã ghi thành công.
-    writer::write(files, config)?;
-    tracker.save()?;
-    stats.output_written = true;
+    writer::write_output(files, config)?;
+    tracker.save_cache()?;
+    stats.is_output_written = true;
 
     Ok(stats)
 }

@@ -4,7 +4,9 @@ pub struct AppContext {
 }
 
 impl AppContext {
-    pub fn new(app_name: String) -> Self {
-        Self { app_name }
+    pub fn new(app_name: impl Into<String>) -> Self {
+        Self {
+            app_name: app_name.into(),
+        }
     }
 }

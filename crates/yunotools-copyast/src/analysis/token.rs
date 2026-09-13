@@ -8,27 +8,27 @@ use crate::pipeline::writer::render_header;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TokenEstimate {
     // Model được sử dụng để ước lượng.
-    pub model: TokenModel,
+    pub token_model: TokenModel,
 
     // Tổng token ước lượng.
-    pub tokens: u64,
+    pub estimated_tokens: u64,
 
     // Tổng số ký tự, bao gồm header.
-    pub characters: u64,
+    pub character_count: u64,
 
     // Tổng số byte UTF-8, bao gồm header.
-    pub bytes: u64,
+    pub byte_count: u64,
 }
 
 impl TokenEstimate {
     // Kiểm tra nội dung có nằm trong giới hạn token hay không.
-    pub fn fits_within(&self, token_limit: u64) -> bool {
-        self.tokens <= token_limit
+    pub fn is_within_limit(&self, token_limit: u64) -> bool {
+        self.estimated_tokens <= token_limit
     }
 
     // Số token còn lại trước khi đạt giới hạn.
-    pub fn remaining_tokens(&self, token_limit: u64) -> u64 {
-        token_limit.saturating_sub(self.tokens)
+    pub fn count_remaining_tokens(&self, token_limit: u64) -> u64 {
+        token_limit.saturating_sub(self.estimated_tokens)
     }
 }
 
@@ -50,16 +50,16 @@ impl TokenEstimator {
     // Ước lượng tổng token của tất cả file,
     // bao gồm cả header do Copyast tạo ra.
     pub fn estimate(files: &[TextFile], config: &CopyastConfig) -> TokenEstimate {
-        let model = config.token_model;
+        let token_model = config.token_model;
         let mut total_tokens = 0_u64;
         let mut total_characters = 0_u64;
         let mut total_bytes = 0_u64;
 
-        for (index, file) in files.iter().enumerate() {
-            if index > 0 {
+        for (file_index, file) in files.iter().enumerate() {
+            if file_index > 0 {
                 accumulate_text(
                     "\n",
-                    model,
+                    token_model,
                     &mut total_tokens,
                     &mut total_characters,
                     &mut total_bytes,
@@ -70,7 +70,7 @@ impl TokenEstimator {
 
             accumulate_text(
                 &header,
-                model,
+                token_model,
                 &mut total_tokens,
                 &mut total_characters,
                 &mut total_bytes,
@@ -78,7 +78,7 @@ impl TokenEstimator {
 
             accumulate_text(
                 &file.content,
-                model,
+                token_model,
                 &mut total_tokens,
                 &mut total_characters,
                 &mut total_bytes,
@@ -87,7 +87,7 @@ impl TokenEstimator {
             if !file.content.ends_with('\n') {
                 accumulate_text(
                     "\n",
-                    model,
+                    token_model,
                     &mut total_tokens,
                     &mut total_characters,
                     &mut total_bytes,
@@ -96,56 +96,56 @@ impl TokenEstimator {
         }
 
         TokenEstimate {
-            model,
-            tokens: total_tokens,
-            characters: total_characters,
-            bytes: total_bytes,
+            token_model,
+            estimated_tokens: total_tokens,
+            character_count: total_characters,
+            byte_count: total_bytes,
         }
     }
 
-    pub fn estimate_text(text: &str, model: TokenModel) -> u64 {
-        let mut ascii_characters = 0_u64;
-        let mut non_ascii_characters = 0_u64;
+    pub fn estimate_text(text: &str, token_model: TokenModel) -> u64 {
+        let mut ascii_chars = 0_u64;
+        let mut non_ascii_chars = 0_u64;
 
-        for character in text.chars() {
-            if character.is_ascii() {
-                ascii_characters += 1;
+        for ch in text.chars() {
+            if ch.is_ascii() {
+                ascii_chars += 1;
             } else {
-                non_ascii_characters += 1;
+                non_ascii_chars += 1;
             }
         }
 
-        let ascii_tokens = match model {
+        let ascii_tokens = match token_model {
             TokenModel::Claude => {
                 // Khoảng 3.8 ký tự ASCII cho một token
-                divide_rounding_up(ascii_characters.saturating_mul(10), 38)
+                divide_ceil(ascii_chars.saturating_mul(10), 38)
             }
 
             _ => {
                 // Khoảng 4 ký tự ASCII cho một token.
-                divide_rounding_up(ascii_characters, 4)
+                divide_ceil(ascii_chars, 4)
             }
         };
 
-        let non_ascii_tokens = match model {
+        let non_ascii_tokens = match token_model {
             TokenModel::Cl100k => {
                 // Tokenizer cũ thường xử lý Unicode
                 // kém hiệu quả hơn
-                non_ascii_characters
+                non_ascii_chars
             }
 
             TokenModel::O200k => {
                 // Ước lượng khoảng 2 token
                 // cho mỗi 3 ký tự Unicode
-                divide_rounding_up(non_ascii_characters.saturating_mul(2), 3)
+                divide_ceil(non_ascii_chars.saturating_mul(2), 3)
             }
 
-            TokenModel::Claude => non_ascii_characters,
+            TokenModel::Claude => non_ascii_chars,
 
             TokenModel::Gemini => {
                 // Ước lượng khoảng 3 token
                 // cho mỗi 4 ký tự Unicode
-                divide_rounding_up(non_ascii_characters.saturating_mul(3), 4)
+                divide_ceil(non_ascii_chars.saturating_mul(3), 4)
             }
         };
 
@@ -155,13 +155,13 @@ impl TokenEstimator {
 
 fn accumulate_text(
     text: &str,
-    model: TokenModel,
+    token_model: TokenModel,
     total_tokens: &mut u64,
     total_characters: &mut u64,
     total_bytes: &mut u64,
 ) {
-    *total_tokens = total_tokens.saturating_add(TokenEstimator::estimate_text(text, model));
-    *total_characters = total_characters.saturating_add(count_characters(text));
+    *total_tokens = total_tokens.saturating_add(TokenEstimator::estimate_text(text, token_model));
+    *total_characters = total_characters.saturating_add(count_chars(text));
     *total_bytes = total_bytes.saturating_add(count_bytes(text));
 }
 
@@ -169,7 +169,7 @@ fn accumulate_text(
 // Ví dụ:
 // 5 / 4 bình thường bằng 1.
 // Hàm này trả về 2.
-fn divide_rounding_up(value: u64, divisor: u64) -> u64 {
+fn divide_ceil(value: u64, divisor: u64) -> u64 {
     if value == 0 {
         return 0;
     }
@@ -177,7 +177,7 @@ fn divide_rounding_up(value: u64, divisor: u64) -> u64 {
     value.saturating_add(divisor - 1) / divisor
 }
 
-fn count_characters(text: &str) -> u64 {
+fn count_chars(text: &str) -> u64 {
     let count = text.chars().count();
     u64::try_from(count).unwrap_or(u64::MAX)
 }

@@ -8,7 +8,7 @@ use std::path::Path;
 const SAMPLE_SIZE: usize = 8 * 1024;
 
 // Kiểm tra file binary và trả lỗi nếu không đọc được file
-pub fn detect_binary(path: &Path) -> io::Result<bool> {
+pub fn is_binary_file(path: &Path) -> io::Result<bool> {
     let mut file = File::open(path)?;
 
     let mut buffer = [0_u8; SAMPLE_SIZE];
@@ -64,7 +64,9 @@ fn has_known_binary_signature(bytes: &[u8]) -> bool {
         b"SQLite format 3\0",
     ];
 
-    SIGNATURES.iter().any(|sig| bytes.starts_with(sig))
+    SIGNATURES
+        .iter()
+        .any(|signature| bytes.starts_with(signature))
 }
 
 // Một file có quá nhiều ký tự điều khiển thường là binary
@@ -77,11 +79,11 @@ fn has_known_binary_signature(bytes: &[u8]) -> bool {
 //  - b'\t': tab.
 //
 fn has_too_many_control_characters(bytes: &[u8]) -> bool {
-    let suspicious_bytes = bytes
+    let suspicious_byte_count = bytes
         .iter()
         .filter(|&&byte| byte < 0x20 && !matches!(byte, b'\n' | b'\r' | b'\t'))
         .count();
 
     // Tính % byte điều khiển xuất hiện
-    suspicious_bytes * 100 / bytes.len() > 10
+    suspicious_byte_count * 100 / bytes.len() > 10
 }

@@ -51,32 +51,32 @@ pub(crate) const CUSTOM_IGNORE_FILES: &[&str] = &[
     ".rgignore",
 ];
 
-// Cấu hình WalkBuilder để hỗ trợ ignore file trong toàn bộ cây thư mục.
+// Cấu hình WalkBuilder để hỗ trợ ignore file trong toàn bộ cây thư mục
 pub(crate) fn configure_walker(
-    builder: &mut WalkBuilder,
-    respect_ignore: bool,
-    include_hidden: bool,
-    additional_ignore_files: &[String],
+    walker_builder: &mut WalkBuilder,
+    should_respect_ignore_files: bool,
+    should_include_hidden_files: bool,
+    additional_ignore_file_names: &[String],
 ) {
-    builder
-        // hidden(true) nghĩa là bỏ qua file và folder ẩn.
-        .hidden(!include_hidden)
-        .parents(respect_ignore)
-        .ignore(respect_ignore)
-        .git_ignore(respect_ignore)
-        .git_global(respect_ignore)
-        .git_exclude(respect_ignore)
-        // Cho phép .gitignore hoạt động ngoài Git repository.
+    walker_builder
+        // hidden(true) nghĩa là bỏ qua file và folder ẩn
+        .hidden(!should_include_hidden_files)
+        .parents(should_respect_ignore_files)
+        .ignore(should_respect_ignore_files)
+        .git_ignore(should_respect_ignore_files)
+        .git_global(should_respect_ignore_files)
+        .git_exclude(should_respect_ignore_files)
+        // Cho phép .gitignore hoạt động ngoài Git repository
         .require_git(false);
 
-    if respect_ignore {
-        for name in CUSTOM_IGNORE_FILES {
-            builder.add_custom_ignore_filename(name);
+    if should_respect_ignore_files {
+        for file_name in CUSTOM_IGNORE_FILES {
+            walker_builder.add_custom_ignore_filename(file_name);
         }
 
-        for name in additional_ignore_files {
-            if !name.trim().is_empty() {
-                builder.add_custom_ignore_filename(name);
+        for file_name in additional_ignore_file_names {
+            if !file_name.trim().is_empty() {
+                walker_builder.add_custom_ignore_filename(file_name);
             }
         }
     }

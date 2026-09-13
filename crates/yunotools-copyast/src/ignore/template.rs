@@ -24,11 +24,14 @@ impl IgnoreTemplate {
             return Some(templates::all::generate());
         }
 
-        let mut seen_names = HashSet::new();
-        let mut selected_templates = Vec::new();
+        // Mọi template ngôn ngữ hoặc framework đều dùng chung
+        // các quy tắc cơ bản của template default.
+        let default_template = templates::catalog::find_template("default")?;
+        let mut seen_names = HashSet::from([default_template.name]);
+        let mut selected_templates = vec![default_template];
 
         for requested_name in requested_names {
-            let template = templates::catalog::find(requested_name)?;
+            let template = templates::catalog::find_template(requested_name)?;
 
             if seen_names.insert(template.name) {
                 selected_templates.push(template);
@@ -44,8 +47,8 @@ impl IgnoreTemplate {
         Some(templates::all::render(selected_templates))
     }
 
-    pub fn available() -> Vec<&'static str> {
-        templates::catalog::all()
+    pub fn list_available_names() -> Vec<&'static str> {
+        templates::catalog::list_templates()
             .iter()
             .map(|template| template.name)
             .chain(std::iter::once("all"))

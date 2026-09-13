@@ -35,7 +35,7 @@ pub enum Framework {
 
 impl fmt::Display for Framework {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
+        let display_name = match self {
             Self::React => "React",
             Self::NextJs => "Next.js",
             Self::Vue => "Vue",
@@ -63,7 +63,7 @@ impl fmt::Display for Framework {
             Self::Flutter => "Flutter",
         };
 
-        formatter.write_str(name)
+        formatter.write_str(display_name)
     }
 }
 
@@ -73,10 +73,10 @@ pub struct DetectedFramework {
     pub framework: Framework,
 
     // Có tìm thấy file đặc trưng của framework không
-    pub marker_found: bool,
+    pub has_marker: bool,
 
     // Có tìm thấy framework trong dependency manifest không
-    pub dependency_found: bool,
+    pub has_dependency: bool,
 }
 
 // Quy tắc nhận diện của một framework
@@ -262,19 +262,19 @@ impl FrameworkDetector {
         let mut detected_frameworks = Vec::new();
 
         for rule in FRAMEWORK_RULES {
-            let marker_found = has_marker(root, files, rule.marker_files);
+            let has_marker = has_marker(root, files, rule.marker_files);
 
-            let dependency_found =
+            let has_dependency =
                 has_dependency(files, rule.manifest_files, rule.dependency_patterns);
 
-            if !marker_found && !dependency_found {
+            if !has_marker && !has_dependency {
                 continue;
             }
 
             detected_frameworks.push(DetectedFramework {
                 framework: rule.framework,
-                marker_found,
-                dependency_found,
+                has_marker,
+                has_dependency,
             });
         }
 
@@ -305,11 +305,11 @@ fn has_dependency(
             return false;
         }
 
-        let lowercase_content = file.content.to_ascii_lowercase();
+        let normalized_content = file.content.to_ascii_lowercase();
 
         dependency_patterns
             .iter()
-            .any(|pattern| lowercase_content.contains(pattern))
+            .any(|pattern| normalized_content.contains(pattern))
     })
 }
 

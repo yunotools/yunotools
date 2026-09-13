@@ -25,20 +25,27 @@ struct CacheState {
     files: BTreeMap<u64, FileFingerprint>,
 }
 
+// Gom các số liệu so sánh vào một kiểu có tên để tránh nhầm thứ tự của tuple.
+struct FileChangeCounts {
+    changed_files: usize,
+    unchanged_files: usize,
+    removed_files: usize,
+}
+
 pub(crate) struct IncrementalTracker {
     cache_path: PathBuf,
 
     // Output có tồn tại trước khi chạy Copyast hay không
-    output_exists: bool,
+    is_output_available: bool,
 
     // Cache cũ có tồn tại và đúng format hay không
-    has_valid_cache: bool,
+    is_cache_valid: bool,
 
     // Fingerprint của những config ảnh hưởng tới output
     configuration_hash: u64,
 
     // Trạng thái của các file trong lần quét hiện tại
-    current_files: BTreeMap<u64, FileFingerprint>,
+    current_fingerprints: BTreeMap<u64, FileFingerprint>,
 
     stats: IncrementalStats,
 }
@@ -46,8 +53,8 @@ pub(crate) struct IncrementalTracker {
 impl IncrementalTracker {
     // So sánh danh sách file hiện tại với cache của lần chạy trước.
     pub(crate) fn analyze(config: &CopyastConfig, files: &[TextFile]) -> io::Result<Self> {
-        let output = &config.output;
-        let cache_path = Self::cache_path_for(output);
+        let output_path = &config.output_path;
+        let cache_path = Self::build_cache_path(output_path);
 
         // Dùng BTreeMap thay cho HashMap
         // - giúp nội dung cache luôn có thứ tự ổn định
@@ -58,48 +65,48 @@ impl IncrementalTracker {
         // Nếu hai đường dẫn tạo ra cùng một path_id, chúng vẫn được xem là cùng khóa
         // Việc chọn BTreeMap chỉ liên quan đến cách lưu và sắp xếp khóa
         let previous_state = load_cache(&cache_path)?;
-        let has_valid_cache = previous_state.is_some();
+        let is_cache_valid = previous_state.is_some();
 
-        let configuration_hash = configuration_fingerprint(config);
+        let configuration_hash = hash_configuration(config);
 
-        let configuration_changed = previous_state
+        let is_configuration_changed = previous_state
             .as_ref()
             .map(|state| state.configuration_hash != configuration_hash)
             .unwrap_or(false);
 
-        let current_files = fingerprint_files(files);
+        let current_fingerprints = fingerprint_files(files);
 
-        let (changed, unchanged, removed) = compare_files(
+        let change_counts = compare_file_states(
             previous_state.as_ref(),
-            &current_files,
-            configuration_changed,
+            &current_fingerprints,
+            is_configuration_changed,
         );
 
         Ok(Self {
             cache_path,
-            output_exists: output.is_file(),
-            has_valid_cache,
+            is_output_available: output_path.is_file(),
+            is_cache_valid,
             configuration_hash,
-            current_files,
+            current_fingerprints,
             stats: IncrementalStats {
-                changed,
-                unchanged,
-                removed,
-                configuration_changed,
+                changed_files: change_counts.changed_files,
+                unchanged_files: change_counts.unchanged_files,
+                removed_files: change_counts.removed_files,
+                is_configuration_changed,
 
                 // Chỉ chuyển thành true sau khi Writer thực sự ghi file.
-                output_written: false,
+                is_output_written: false,
             },
         })
     }
 
     // Cho biết output có cần được tạo hoặc cập nhật hay không
-    pub(crate) fn needs_update(&self) -> bool {
-        !self.output_exists
-            || !self.has_valid_cache
-            || self.stats.configuration_changed
-            || self.stats.changed > 0
-            || self.stats.removed > 0
+    pub(crate) fn should_update_output(&self) -> bool {
+        !self.is_output_available
+            || !self.is_cache_valid
+            || self.stats.is_configuration_changed
+            || self.stats.changed_files > 0
+            || self.stats.removed_files > 0
     }
 
     // Trả về kết quả thống kê
@@ -109,7 +116,7 @@ impl IncrementalTracker {
 
     // Lưu trạng thái hiện tại để lần chạy sau có thể so sánh
     // Chỉ nên gọi hàm này sau khi Writer ghi output thành công
-    pub(crate) fn save(&self) -> io::Result<()> {
+    pub(crate) fn save_cache(&self) -> io::Result<()> {
         create_parent_directory(&self.cache_path)?;
 
         // Không ghi trực tiếp vào cache chính.
@@ -120,7 +127,7 @@ impl IncrementalTracker {
         if let Err(error) = write_cache(
             &temporary_cache_path,
             self.configuration_hash,
-            &self.current_files,
+            &self.current_fingerprints,
         ) {
             let _ = fs::remove_file(&temporary_cache_path);
             return Err(error);
@@ -137,14 +144,14 @@ impl IncrementalTracker {
     // Tạo đường dẫn cache dựa trên đường dẫn output
     // Ví dụ:
     // context.txt → context.txt.copyast-cache
-    pub(crate) fn cache_path_for(output: impl AsRef<Path>) -> PathBuf {
-        append_suffix(output.as_ref(), ".copyast-cache")
+    pub(crate) fn build_cache_path(output_path: impl AsRef<Path>) -> PathBuf {
+        append_suffix(output_path.as_ref(), ".copyast-cache")
     }
 
     // Scanner sử dụng đường dẫn này để không đọc
     // nhầm cache đang được ghi dở
-    pub(crate) fn temporary_cache_path_for(output: impl AsRef<Path>) -> PathBuf {
-        let cache_path = Self::cache_path_for(output);
+    pub(crate) fn build_temporary_cache_path(output_path: impl AsRef<Path>) -> PathBuf {
+        let cache_path = Self::build_cache_path(output_path);
 
         append_suffix(&cache_path, ".tmp")
     }
@@ -177,49 +184,61 @@ fn write_cache(
 }
 
 // So sánh trạng thái file hiện tại với cache cũ
-fn compare_files(
+fn compare_file_states(
     previous_state: Option<&CacheState>,
-    current_files: &BTreeMap<u64, FileFingerprint>,
-    configuration_changed: bool,
-) -> (usize, usize, usize) {
+    current_fingerprints: &BTreeMap<u64, FileFingerprint>,
+    is_configuration_changed: bool,
+) -> FileChangeCounts {
     let Some(previous_state) = previous_state else {
         // Không có cache:
         // tất cả file hiện tại được xem là changed
-        return (current_files.len(), 0, 0);
+        return FileChangeCounts {
+            changed_files: current_fingerprints.len(),
+            unchanged_files: 0,
+            removed_files: 0,
+        };
     };
 
-    let mut removed = 0_usize;
+    let mut removed_files = 0_usize;
 
     // File tồn tại trong cache nhưng không còn
     // trong lần quét hiện tại được xem là removed
     for path_id in previous_state.files.keys() {
-        if !current_files.contains_key(path_id) {
-            removed += 1;
+        if !current_fingerprints.contains_key(path_id) {
+            removed_files += 1;
         }
     }
 
     // Khi config render thay đổi, tất cả file
     // cần được ghi lại dù source không thay đổi
-    if configuration_changed {
-        return (current_files.len(), 0, removed);
+    if is_configuration_changed {
+        return FileChangeCounts {
+            changed_files: current_fingerprints.len(),
+            unchanged_files: 0,
+            removed_files,
+        };
     }
 
-    let mut changed = 0_usize;
-    let mut unchanged = 0_usize;
+    let mut changed_files = 0_usize;
+    let mut unchanged_files = 0_usize;
 
-    for (path_id, current_fingerprint) in current_files {
+    for (path_id, current_fingerprint) in current_fingerprints {
         match previous_state.files.get(path_id) {
             Some(previous_fingerprint) if previous_fingerprint == current_fingerprint => {
-                unchanged += 1;
+                unchanged_files += 1;
             }
 
             _ => {
-                changed += 1;
+                changed_files += 1;
             }
         }
     }
 
-    (changed, unchanged, removed)
+    FileChangeCounts {
+        changed_files,
+        unchanged_files,
+        removed_files,
+    }
 }
 
 // Chuyển danh sách TextFile thành:
@@ -230,11 +249,11 @@ fn fingerprint_files(files: &[TextFile]) -> BTreeMap<u64, FileFingerprint> {
     for file in files {
         let normalized_path = normalize_path(&file.path);
 
-        let path_id = stable_hash(normalized_path.as_bytes());
+        let path_id = hash_stably(normalized_path.as_bytes());
 
         let fingerprint = FileFingerprint {
-            size: file.size_bytes(),
-            content_hash: stable_hash(file.content.as_bytes()),
+            size: file.count_bytes(),
+            content_hash: hash_stably(file.content.as_bytes()),
         };
 
         fingerprints.insert(path_id, fingerprint);
@@ -337,11 +356,12 @@ fn load_cache(cache_path: &Path) -> io::Result<Option<CacheState>> {
             return Ok(None);
         };
 
-        let previous_value = fingerprints.insert(path_id, FileFingerprint { size, content_hash });
+        let replaced_fingerprint =
+            fingerprints.insert(path_id, FileFingerprint { size, content_hash });
 
         // Hai dòng có cùng path_id được xem
         // là dấu hiệu cache không hợp lệ
-        if previous_value.is_some() {
+        if replaced_fingerprint.is_some() {
             return Ok(None);
         }
     }
@@ -360,14 +380,14 @@ fn load_cache(cache_path: &Path) -> io::Result<Option<CacheState>> {
 
 // Tạo fingerprint cho những config thực sự
 // ảnh hưởng tới nội dung file output
-fn configuration_fingerprint(config: &CopyastConfig) -> u64 {
+fn hash_configuration(config: &CopyastConfig) -> u64 {
     let path_mode = match config.path_mode {
         PathMode::Auto => "auto",
         PathMode::Relative => "relative",
         PathMode::Absolute => "absolute",
     };
 
-    let normalized_input = normalize_path(&config.input);
+    let normalized_input = normalize_path(&config.input_path);
 
     let configuration = format!(
         concat!(
@@ -376,10 +396,10 @@ fn configuration_fingerprint(config: &CopyastConfig) -> u64 {
             "path-mode={}\n",
             "deduplicate={}"
         ),
-        OUTPUT_FORMAT_VERSION, normalized_input, path_mode, config.deduplicate,
+        OUTPUT_FORMAT_VERSION, normalized_input, path_mode, config.should_deduplicate,
     );
 
-    stable_hash(configuration.as_bytes())
+    hash_stably(configuration.as_bytes())
 }
 
 // Chuẩn hóa đường dẫn trước khi hash
@@ -398,7 +418,7 @@ fn normalize_path(path: &Path) -> String {
 // Thuật toán FNV-1a 64-bit
 // Hash này cần ổn định giữa nhiều lần chạy chương trình,
 // nhưng không được dùng cho mật khẩu hoặc mục đích bảo mật
-fn stable_hash(bytes: &[u8]) -> u64 {
+fn hash_stably(bytes: &[u8]) -> u64 {
     // 14695981039346656037, 1099511628211 là các hằng số tiêu chuẩn của FNV-1a 64-bit
     // Ta không nên tự ý thay hai hằng số này nếu vẫn muốn gọi hàm là FNV-1a 64-bit.
 

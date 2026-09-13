@@ -1,7 +1,7 @@
 use crate::config::{CopyastConfig, PathMode};
 use crate::domain::TextFile;
 use crate::pipeline::file_ops::{
-    absolute_path, append_suffix, create_parent_directory, replace_file,
+    append_suffix, create_parent_directory, replace_file, resolve_absolute_path,
 };
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
@@ -9,18 +9,18 @@ use std::path::{Path, PathBuf};
 
 const COPYAST_BANNER: &str = "******************Yunotools-Copyast******************";
 
-pub(crate) fn write(files: &[TextFile], config: &CopyastConfig) -> io::Result<()> {
-    create_parent_directory(&config.output)?;
+pub(crate) fn write_output(files: &[TextFile], config: &CopyastConfig) -> io::Result<()> {
+    create_parent_directory(&config.output_path)?;
 
     // Ghi ra file tạm trước để output cũ không bị dở dang nếu có lỗi.
-    let temporary_output = temporary_path_for(&config.output);
+    let temporary_output = build_temporary_path(&config.output_path);
 
-    if let Err(error) = write_to_path(files, config, &temporary_output) {
+    if let Err(error) = write_files_to_path(files, config, &temporary_output) {
         let _ = fs::remove_file(&temporary_output);
         return Err(error);
     }
 
-    if let Err(error) = replace_file(&temporary_output, &config.output) {
+    if let Err(error) = replace_file(&temporary_output, &config.output_path) {
         let _ = fs::remove_file(&temporary_output);
         return Err(error);
     }
@@ -28,13 +28,13 @@ pub(crate) fn write(files: &[TextFile], config: &CopyastConfig) -> io::Result<()
     Ok(())
 }
 
-pub(crate) fn temporary_path_for(output: &Path) -> PathBuf {
-    append_suffix(output, ".copyast-tmp")
+pub(crate) fn build_temporary_path(output_path: &Path) -> PathBuf {
+    append_suffix(output_path, ".copyast-tmp")
 }
 
 // Dùng chung cho Writer và TokenEstimator để hai module tính cùng một header.
 pub(crate) fn render_header(file: &TextFile, config: &CopyastConfig) -> String {
-    let displayed_path = path_for_header(&file.path, config);
+    let displayed_path = resolve_header_path(&file.path, config);
 
     format!(
         "{COPYAST_BANNER}\n******************{}******************\n",
@@ -42,13 +42,17 @@ pub(crate) fn render_header(file: &TextFile, config: &CopyastConfig) -> String {
     )
 }
 
-fn write_to_path(files: &[TextFile], config: &CopyastConfig, output: &Path) -> io::Result<()> {
-    let output_file = File::create(output)?;
+fn write_files_to_path(
+    files: &[TextFile],
+    config: &CopyastConfig,
+    output_path: &Path,
+) -> io::Result<()> {
+    let output_file = File::create(output_path)?;
     let mut writer = BufWriter::new(output_file);
 
-    for (index, file) in files.iter().enumerate() {
+    for (file_index, file) in files.iter().enumerate() {
         // Chèn một dòng trống giữa hai file.
-        if index > 0 {
+        if file_index > 0 {
             writeln!(writer)?;
         }
 
@@ -65,32 +69,32 @@ fn write_to_path(files: &[TextFile], config: &CopyastConfig, output: &Path) -> i
     writer.get_ref().sync_all()
 }
 
-fn path_for_header(file_path: &Path, config: &CopyastConfig) -> PathBuf {
-    let use_absolute_path = match config.path_mode {
+fn resolve_header_path(file_path: &Path, config: &CopyastConfig) -> PathBuf {
+    let should_use_absolute_path = match config.path_mode {
         PathMode::Absolute => true,
         PathMode::Relative => false,
-        PathMode::Auto => config.input.is_absolute(),
+        PathMode::Auto => config.input_path.is_absolute(),
     };
 
-    if use_absolute_path {
-        return absolute_path(file_path);
+    if should_use_absolute_path {
+        return resolve_absolute_path(file_path);
     }
 
-    let input_root = if config.input.is_file() {
-        config.input.parent().unwrap_or(Path::new("."))
+    let input_root = if config.input_path.is_file() {
+        config.input_path.parent().unwrap_or(Path::new("."))
     } else {
-        &config.input
+        &config.input_path
     };
 
     if let Ok(relative_path) = file_path.strip_prefix(input_root) {
         return relative_path.to_path_buf();
     }
 
-    let absolute_file = absolute_path(file_path);
-    let absolute_root = absolute_path(input_root);
+    let absolute_file_path = resolve_absolute_path(file_path);
+    let absolute_input_root = resolve_absolute_path(input_root);
 
-    absolute_file
-        .strip_prefix(absolute_root)
+    absolute_file_path
+        .strip_prefix(absolute_input_root)
         .map(Path::to_path_buf)
         .unwrap_or_else(|_| file_path.to_path_buf())
 }

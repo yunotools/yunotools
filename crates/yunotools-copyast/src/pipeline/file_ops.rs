@@ -7,16 +7,16 @@ use std::path::{Path, PathBuf};
 // Thêm suffix vào cuối đường dẫn mà không làm mất extension.
 // Ví dụ: context.txt + ".copyast-tmp" -> context.txt.copyast-tmp.
 pub(crate) fn append_suffix(path: &Path, suffix: &str) -> PathBuf {
-    let mut result = path.as_os_str().to_os_string();
-    result.push(suffix);
-    PathBuf::from(result)
+    let mut suffixed_path = path.as_os_str().to_os_string();
+    suffixed_path.push(suffix);
+    PathBuf::from(suffixed_path)
 }
 
 // canonicalize() xử lý relative path, ".", ".." và symbolic link.
 // Khi output chưa tồn tại, ta ghép relative path với current directory.
-pub(crate) fn absolute_path(path: &Path) -> PathBuf {
+pub(crate) fn resolve_absolute_path(path: &Path) -> PathBuf {
     if let Ok(canonical_path) = path.canonicalize() {
-        return canonical_path;
+        return normalize_windows_verbatim_path(canonical_path);
     }
 
     if path.is_absolute() {
@@ -28,16 +28,55 @@ pub(crate) fn absolute_path(path: &Path) -> PathBuf {
         .unwrap_or_else(|_| path.to_path_buf())
 }
 
+// canonicalize() trên Windows thường trả về dạng `\\?\C:\...`.
+// Prefix này hữu ích cho Windows API nhưng không thân thiện khi hiển thị trong header
+#[cfg(windows)]
+fn normalize_windows_verbatim_path(path: PathBuf) -> PathBuf {
+    use std::path::{Component, Prefix};
+
+    let mut components = path.components();
+    let Some(Component::Prefix(prefix_component)) = components.next() else {
+        return path;
+    };
+
+    let mut normalized_path = match prefix_component.kind() {
+        Prefix::VerbatimDisk(drive_letter) => {
+            PathBuf::from(format!("{}:\\", char::from(drive_letter)))
+        }
+        Prefix::VerbatimUNC(server, share) => {
+            let mut unc_path = PathBuf::from(r"\\");
+            unc_path.push(server);
+            unc_path.push(share);
+            unc_path
+        }
+        _ => return path,
+    };
+
+    for component in components {
+        if let Component::Normal(path_segment) = component {
+            normalized_path.push(path_segment);
+        }
+    }
+
+    normalized_path
+}
+
+#[cfg(not(windows))]
+fn normalize_windows_verbatim_path(path: PathBuf) -> PathBuf {
+    path
+}
+
 // Trên Windows, đường dẫn thường không phân biệt chữ hoa/chữ thường.
-pub(crate) fn paths_equal(left: &Path, right: &Path) -> bool {
-    let left = absolute_path(left);
-    let right = absolute_path(right);
+pub(crate) fn are_paths_equal(first_path: &Path, second_path: &Path) -> bool {
+    let first_path = resolve_absolute_path(first_path);
+    let second_path = resolve_absolute_path(second_path);
 
     if cfg!(windows) {
-        left.to_string_lossy()
-            .eq_ignore_ascii_case(&right.to_string_lossy())
+        first_path
+            .to_string_lossy()
+            .eq_ignore_ascii_case(&second_path.to_string_lossy())
     } else {
-        left == right
+        first_path == second_path
     }
 }
 

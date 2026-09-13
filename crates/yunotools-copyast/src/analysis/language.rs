@@ -38,7 +38,7 @@ pub enum Language {
 // Cho phép chuyển Language thành text bằng `to_string()`.
 impl fmt::Display for Language {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
+        let display_name = match self {
             Self::Rust => "Rust",
             Self::Python => "Python",
             Self::JavaScript => "JavaScript",
@@ -66,7 +66,7 @@ impl fmt::Display for Language {
             Self::Dockerfile => "Dockerfile",
         };
 
-        formatter.write_str(name)
+        formatter.write_str(display_name)
     }
 }
 
@@ -82,14 +82,14 @@ pub struct DetectedLanguage {
     pub confidence: u8,
 
     // Có tìm thấy file đặc trưng của ngôn ngữ hay không.
-    pub marker_found: bool,
+    pub has_marker: bool,
 }
 
 // Dữ liệu tạm dùng trong quá trình tính toán.
 #[derive(Default)]
 struct LanguageEvidence {
     file_count: usize,
-    marker_found: bool,
+    has_marker: bool,
 }
 
 pub struct LanguageDetector;
@@ -107,41 +107,41 @@ impl LanguageDetector {
         // Rust       → 20 file, có Cargo.toml
         // TypeScript → 10 file, có tsconfig.json
         // Python     → 2 file, không có marker
-        let mut evidence = BTreeMap::<Language, LanguageEvidence>::new();
+        let mut evidence_by_language = BTreeMap::<Language, LanguageEvidence>::new();
 
         // Nhận diện bằng phần mở rộng và shebang
         for file in files {
-            let Some(language) = language_from_file(file) else {
+            let Some(language) = detect_file_language(file) else {
                 continue;
             };
 
-            evidence.entry(language).or_default().file_count += 1;
+            evidence_by_language.entry(language).or_default().file_count += 1;
         }
 
         // Nhận diện bằng các file đặc trưng
         // BTreeSet cũng tự loại các giá trị trùng.
         // Nếu cả pyproject.toml và requirements.txt tồn tại, Python vẫn chỉ xuất hiện một lần.
-        for language in marker_languages(root) {
-            evidence.entry(language).or_default().marker_found = true;
+        for language in find_marker_languages(root) {
+            evidence_by_language.entry(language).or_default().has_marker = true;
         }
 
-        let total_recognized_files = evidence
+        let total_recognized_files = evidence_by_language
             .values()
-            .map(|item| item.file_count)
+            .map(|evidence| evidence.file_count)
             .sum::<usize>()
             .max(1);
 
-        let mut detected_languages = evidence
+        let mut detected_languages = evidence_by_language
             .into_iter()
-            .map(|(language, item)| DetectedLanguage {
+            .map(|(language, language_evidence)| DetectedLanguage {
                 language,
-                file_count: item.file_count,
+                file_count: language_evidence.file_count,
                 confidence: calculate_confidence(
-                    item.file_count,
+                    language_evidence.file_count,
                     total_recognized_files,
-                    item.marker_found,
+                    language_evidence.has_marker,
                 ),
-                marker_found: item.marker_found,
+                has_marker: language_evidence.has_marker,
             })
             .collect::<Vec<_>>();
 
@@ -158,12 +158,12 @@ impl LanguageDetector {
 }
 
 // Nhận diện ngôn ngữ của một TextFile.
-fn language_from_file(file: &TextFile) -> Option<Language> {
-    language_from_path(&file.path).or_else(|| language_from_shebang(&file.content))
+fn detect_file_language(file: &TextFile) -> Option<Language> {
+    detect_path_language(&file.path).or_else(|| detect_shebang_language(&file.content))
 }
 
 // Nhận diện bằng tên file hoặc phần mở rộng.
-fn language_from_path(path: &Path) -> Option<Language> {
+fn detect_path_language(path: &Path) -> Option<Language> {
     let file_name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
 
     if file_name == "dockerfile" || file_name.starts_with("dockerfile.") {
@@ -229,7 +229,7 @@ fn language_from_path(path: &Path) -> Option<Language> {
 // Ví dụ:
 // #!/usr/bin/env python3
 // #!/usr/bin/env bash
-fn language_from_shebang(content: &str) -> Option<Language> {
+fn detect_shebang_language(content: &str) -> Option<Language> {
     let first_line = content.lines().next()?;
 
     if !first_line.starts_with("#!") {
@@ -258,7 +258,7 @@ fn language_from_shebang(content: &str) -> Option<Language> {
 // Tìm ngôn ngữ dựa trên các file đặc trưng
 // BTreeSet cũng tự loại các giá trị trùng.
 // Nếu cả pyproject.toml và requirements.txt tồn tại, Python vẫn chỉ xuất hiện một lần.
-fn marker_languages(root: &Path) -> BTreeSet<Language> {
+fn find_marker_languages(root: &Path) -> BTreeSet<Language> {
     let mut languages = BTreeSet::new();
 
     let markers = [
@@ -293,7 +293,7 @@ fn marker_languages(root: &Path) -> BTreeSet<Language> {
 // Tính confidence dựa trên:
 // - tỉ lệ file của ngôn ngữ;
 // - sự xuất hin của marker
-fn calculate_confidence(file_count: usize, total_files: usize, marker_found: bool) -> u8 {
+fn calculate_confidence(file_count: usize, total_files: usize, has_marker: bool) -> u8 {
     const FILE_EVIDENCE_WEIGHT: usize = 70;
     const MARKER_EVIDENCE_WEIGHT: usize = 30;
 
@@ -307,7 +307,7 @@ fn calculate_confidence(file_count: usize, total_files: usize, marker_found: boo
         .checked_div(total_files)
         .unwrap_or(0);
 
-    let marker_score = if marker_found {
+    let marker_score = if has_marker {
         MARKER_EVIDENCE_WEIGHT
     } else {
         0

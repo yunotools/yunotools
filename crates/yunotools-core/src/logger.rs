@@ -15,11 +15,11 @@ pub enum LogLevel {
 static MINIMUM_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Info as u8);
 
 pub fn init_from_env() {
-    let Ok(value) = std::env::var("YUNTUNS_LOG") else {
+    let Ok(raw_level) = std::env::var("YUNTUNS_LOG") else {
         return;
     };
 
-    let level = match value.trim().to_ascii_lowercase().as_str() {
+    let level = match raw_level.trim().to_ascii_lowercase().as_str() {
         "debug" | "trace" => LogLevel::Debug,
         "info" => LogLevel::Info,
         "warn" | "warning" => LogLevel::Warn,
@@ -35,38 +35,38 @@ pub fn set_level(level: LogLevel) {
     MINIMUM_LEVEL.store(level as u8, Ordering::Relaxed);
 }
 
-fn timestamp() -> String {
+fn format_timestamp() -> String {
     Local::now().format("%H:%M:%S").to_string()
 }
 
 pub fn info(message: &str) {
-    log(LogLevel::Info, "INFO", Color::Blue, message);
+    write_log(LogLevel::Info, "INFO", Color::Blue, message);
 }
 
 pub fn success(message: &str) {
-    log(LogLevel::Info, " OK ", Color::Green, message);
+    write_log(LogLevel::Info, " OK ", Color::Green, message);
 }
 
 pub fn warn(message: &str) {
-    log(LogLevel::Warn, "WARN", Color::Yellow, message);
+    write_log(LogLevel::Warn, "WARN", Color::Yellow, message);
 }
 
 pub fn error(message: &str) {
-    log(LogLevel::Error, "ERROR", Color::Red, message);
+    write_log(LogLevel::Error, "ERROR", Color::Red, message);
 }
 
 pub fn debug(message: &str) {
-    log(LogLevel::Debug, "DEBUG", Color::BrightBlack, message);
+    write_log(LogLevel::Debug, "DEBUG", Color::BrightBlack, message);
 }
 
-fn log(level: LogLevel, label: &str, color: Color, message: &str) {
+fn write_log(level: LogLevel, label: &str, color: Color, message: &str) {
     if (level as u8) < MINIMUM_LEVEL.load(Ordering::Relaxed) {
         return;
     }
 
     eprintln!(
         "{} {} {}",
-        timestamp().bright_black(),
+        format_timestamp().bright_black(),
         format!("[{label}]").color(color).bold(),
         message,
     );

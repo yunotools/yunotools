@@ -6,26 +6,29 @@ use std::path::Path;
 pub struct IgnoreGenerator;
 
 impl IgnoreGenerator {
-    pub fn generate(template_name: &str) -> Result<(), CopyastError> {
-        Self::generate_to(template_name, ".yunotools-ignore")
+    pub fn generate(template_selection: &str) -> Result<(), CopyastError> {
+        Self::generate_to(template_selection, ".yunotools-ignore")
     }
 
-    pub fn generate_to(template_name: &str, output: impl AsRef<Path>) -> Result<(), CopyastError> {
-        let content = IgnoreTemplate::generate(template_name).ok_or_else(|| {
+    pub fn generate_to(
+        template_selection: &str,
+        output_path: impl AsRef<Path>,
+    ) -> Result<(), CopyastError> {
+        let ignore_content = IgnoreTemplate::generate(template_selection).ok_or_else(|| {
             CopyastError::UnknownIgnoreTemplate {
-                name: template_name.to_owned(),
+                name: template_selection.to_owned(),
             }
         })?;
 
-        let output = output.as_ref();
+        let output_path = output_path.as_ref();
 
-        if let Some(parent) = output.parent()
+        if let Some(parent) = output_path.parent()
             && !parent.as_os_str().is_empty()
         {
             fs::create_dir_all(parent)?;
         }
 
-        fs::write(output, content)?;
+        fs::write(output_path, ignore_content)?;
 
         Ok(())
     }

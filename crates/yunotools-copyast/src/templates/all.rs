@@ -1,25 +1,25 @@
 use super::catalog;
 
 pub fn generate() -> String {
-    render(catalog::all())
+    render(catalog::list_templates())
 }
 
 pub(crate) fn render<'a>(
     templates: impl IntoIterator<Item = &'a catalog::TemplateDefinition>,
 ) -> String {
-    let mut result = String::new();
+    let mut output = String::new();
 
-    for (index, template) in templates.into_iter().enumerate() {
-        if index > 0 {
-            result.push('\n');
+    for (template_index, template) in templates.into_iter().enumerate() {
+        if template_index > 0 {
+            output.push('\n');
         }
 
-        result.push_str("# =========================\n# ");
-        result.push_str(template.title);
-        result.push_str("\n# =========================\n");
-        result.push_str(template.content.trim());
-        result.push('\n');
+        output.push_str("# =========================\n# ");
+        output.push_str(template.title);
+        output.push_str("\n# =========================\n");
+        output.push_str(template.content.trim());
+        output.push('\n');
     }
 
-    result
+    output
 }
