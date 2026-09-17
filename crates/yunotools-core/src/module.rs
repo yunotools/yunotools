@@ -2,13 +2,13 @@ use crate::{AppContext, AppError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ModuleMetadata {
-    /// Tên duy nhất dùng để hiển thị và tìm kiếm module.
+    // Tên duy nhất dùng để hiển thị và tìm kiếm module.
     pub name: &'static str,
 
-    /// Mô tả ngắn về chức năng của module.
+    // Mô tả ngắn về chức năng của module.
     pub description: &'static str,
 
-    /// Các cờ CLI có thể dùng để chọn module.
+    // Các cờ CLI có thể dùng để chọn module.
     pub command_flags: &'static [&'static str],
 }
 

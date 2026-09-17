@@ -7,7 +7,7 @@ use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-const COPYAST_BANNER: &str = "******************Yunotools-Copyast******************";
+const COPYAST_BANNER: &str = "=== Yunotools-Copyast ===";
 
 pub(crate) fn write_output(files: &[TextFile], config: &CopyastConfig) -> io::Result<()> {
     create_parent_directory(&config.output_path)?;
@@ -37,7 +37,7 @@ pub(crate) fn render_header(file: &TextFile, config: &CopyastConfig) -> String {
     let displayed_path = resolve_header_path(&file.path, config);
 
     format!(
-        "{COPYAST_BANNER}\n******************{}******************\n",
+        "{COPYAST_BANNER}\n=== FILE: {} ===\n",
         displayed_path.display(),
     )
 }
